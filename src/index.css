@@ -1,0 +1,31 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Space Grotesk", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  
+  --color-studio-bg: #0a0a0c;
+  --color-studio-card: #141417;
+  --color-studio-border: #242429;
+  --color-studio-accent: #f59e0b; /* Amber for that warm studio glow */
+  --color-studio-muted: #71717a;
+}
+
+@layer base {
+  body {
+    @apply bg-studio-bg text-white font-sans antialiased;
+  }
+}
+
+.studio-glass {
+  @apply bg-studio-card/80 backdrop-blur-xl border border-studio-border;
+}
+
+.glow-amber {
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.2);
+}
+
+.glow-text {
+  text-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
+}
