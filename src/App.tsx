@@ -21,6 +21,7 @@ import {
   Sparkles,
   HelpCircle,
   TrendingUp,
+  RotateCcw,
 } from 'lucide-react';
 
 import { DripCheckResult, AudioDspMetrics, ComparisonResult, TimecodedMarker } from './lib/types';
@@ -124,6 +125,35 @@ function DripCheckWorkstation() {
   const saveApiKey = (key: string) => {
     setApiKey(key);
     localStorage.setItem('dripcheck_gemini_key', key);
+  };
+
+  // Reset Workstation State without refreshing page
+  const handleReset = () => {
+    if (audioUrl) {
+      try { URL.revokeObjectURL(audioUrl); } catch (_) {}
+    }
+    setFile(null);
+    setAudioUrl(null);
+    setDspMetrics(null);
+    setResult(null);
+    setError(null);
+    setIsAnalyzing(false);
+    setAnalysisStep('');
+    setActiveTier('all');
+  };
+
+  const handleResetCompare = () => {
+    if (audioUrlA) { try { URL.revokeObjectURL(audioUrlA); } catch (_) {} }
+    if (audioUrlB) { try { URL.revokeObjectURL(audioUrlB); } catch (_) {} }
+    setFileA(null);
+    setAudioUrlA(null);
+    setFileB(null);
+    setAudioUrlB(null);
+    setRefSongLink('');
+    setComparisonResult(null);
+    setError(null);
+    setIsAnalyzing(false);
+    setAnalysisStep('');
   };
 
   // Convert File to Base64
@@ -422,6 +452,17 @@ Audited via DripCheck Pro Multi-Agent Workstation
 
         {/* Actions */}
         <div className="flex items-center gap-2">
+          {(file || result || fileA || fileB || comparisonResult) && (
+            <button
+              onClick={mode === 'single' ? handleReset : handleResetCompare}
+              className="p-2 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white hover:border-zinc-700 transition-colors text-xs flex items-center gap-1.5"
+              title="Reset Workstation without page reload"
+            >
+              <RotateCcw className="w-4 h-4 text-cyan-400" />
+              <span className="hidden lg:inline text-xs font-semibold">Reset</span>
+            </button>
+          )}
+
           <button
             onClick={() => setShowArchive(true)}
             className="p-2 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white hover:border-zinc-700 transition-colors text-xs flex items-center gap-1.5"
@@ -516,23 +557,36 @@ Audited via DripCheck Pro Multi-Agent Workstation
             {/* Analysis Action Button & Status */}
             {file && !result && (
               <div className="flex flex-col items-center gap-3">
-                <button
-                  onClick={handleAnalyze}
-                  disabled={isAnalyzing}
-                  className="px-8 py-3.5 rounded-2xl bg-gradient-to-r from-cyan-500 via-sky-500 to-indigo-500 hover:opacity-95 text-zinc-950 font-extrabold text-sm transition-all shadow-xl shadow-cyan-500/20 disabled:opacity-50 flex items-center gap-2 transform active:scale-95"
-                >
-                  {isAnalyzing ? (
-                    <>
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                      <span>{analysisStep || 'Auditing Audio...'}</span>
-                    </>
-                  ) : (
-                    <>
-                      <Zap className="w-5 h-5 fill-current" />
-                      <span>RUN DEEP FORENSIC & A&R AUDIT</span>
-                    </>
+                <div className="flex flex-wrap items-center justify-center gap-3">
+                  <button
+                    onClick={handleAnalyze}
+                    disabled={isAnalyzing}
+                    className="px-8 py-3.5 rounded-2xl bg-gradient-to-r from-cyan-500 via-sky-500 to-indigo-500 hover:opacity-95 text-zinc-950 font-extrabold text-sm transition-all shadow-xl shadow-cyan-500/20 disabled:opacity-50 flex items-center gap-2 transform active:scale-95"
+                  >
+                    {isAnalyzing ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        <span>{analysisStep || 'Auditing Audio...'}</span>
+                      </>
+                    ) : (
+                      <>
+                        <Zap className="w-5 h-5 fill-current" />
+                        <span>RUN DEEP FORENSIC & A&R AUDIT</span>
+                      </>
+                    )}
+                  </button>
+
+                  {!isAnalyzing && (
+                    <button
+                      onClick={handleReset}
+                      className="px-5 py-3.5 rounded-2xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white font-semibold text-xs transition-all border border-zinc-800 flex items-center gap-2 shadow-md"
+                      title="Clear loaded audio and choose another track"
+                    >
+                      <RotateCcw className="w-4 h-4 text-cyan-400" />
+                      <span>Clear Track</span>
+                    </button>
                   )}
-                </button>
+                </div>
                 {isAnalyzing && (
                   <p className="text-xs text-zinc-400 font-mono animate-pulse">
                     Processing 44.1kHz audio stream with Gemini Multimodal + Web Audio DSP
@@ -563,6 +617,15 @@ Audited via DripCheck Pro Multi-Agent Workstation
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={handleReset}
+                      className="px-3.5 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white text-xs font-bold flex items-center gap-1.5 transition-colors border border-zinc-700 shadow-sm"
+                      title="Clear this audit and analyze another track without refreshing the browser"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>Audit New Track / Reset</span>
+                    </button>
+
                     <button
                       onClick={() => setShowSyncModal(true)}
                       className="px-3 py-1.5 rounded-xl bg-zinc-900 border border-zinc-800 text-emerald-400 hover:border-emerald-600 text-xs font-semibold flex items-center gap-1.5 transition-colors"
@@ -857,11 +920,11 @@ Audited via DripCheck Pro Multi-Agent Workstation
             </div>
 
             {/* Run Compare Button */}
-            <div className="text-center pt-2">
+            <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
               <button
                 onClick={handleCompare}
                 disabled={isAnalyzing || !fileB}
-                className="px-8 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-cyan-500 text-zinc-950 font-extrabold text-sm hover:opacity-95 disabled:opacity-50 transition-all shadow-xl shadow-cyan-500/10 flex items-center gap-2 mx-auto"
+                className="px-8 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-cyan-500 text-zinc-950 font-extrabold text-sm hover:opacity-95 disabled:opacity-50 transition-all shadow-xl shadow-cyan-500/10 flex items-center gap-2"
               >
                 {isAnalyzing ? (
                   <>
@@ -875,6 +938,17 @@ Audited via DripCheck Pro Multi-Agent Workstation
                   </>
                 )}
               </button>
+
+              {(fileA || fileB || comparisonResult) && !isAnalyzing && (
+                <button
+                  onClick={handleResetCompare}
+                  className="px-5 py-3.5 rounded-2xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white font-semibold text-xs transition-all border border-zinc-800 flex items-center gap-2 shadow-md"
+                  title="Clear comparison tracks"
+                >
+                  <RotateCcw className="w-4 h-4 text-emerald-400" />
+                  <span>Reset Comparison</span>
+                </button>
+              )}
             </div>
 
             {/* Comparison Results */}
