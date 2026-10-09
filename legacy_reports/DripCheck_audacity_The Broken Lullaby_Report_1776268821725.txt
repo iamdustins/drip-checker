@@ -1,0 +1,64 @@
+
+DRIPCHECK AI - SONIC ANALYSIS REPORT
+Generated: 4/15/2026, 11:00:21 AM
+Input File: audacity_The Broken Lullaby.mp3
+--------------------------------------------------
+
+TRACK: The Broken Lullaby
+ARTIST: Audacity
+GENRE: Hyperpop
+BPM: 160
+
+DRIP SCORE: 81/100
+VERDICT: A masterclass in digital chaos that captures the current hyperpop zeitgeist but requires a surgical mix-down for mainstream viability.
+
+STRATEGIC RECOMMENDATION
+========================
+Path: Social Media/YouTube
+Reasoning: The erratic structure and high-energy glitch aesthetic are tailor-made for TikTok trends and fast-paced visual content.
+
+A&R FEEDBACK
+============
+The Beat: Industrial-grade percussion with aggressive sidechaining and stutter-gating. The kick has significant weight but lacks surgical EQ in the low-mids.
+Vocals/Lead: High-pitched, formant-shifted aesthetic with heavy digital saturation. The emotive delivery is high, though the processing leads to some intelligibility issues.
+Style/Vibe: Avant-garde maximalism; a textbook blend of glitch-core and futuristic pop reminiscent of the SOPHIE era.
+Commercial Potential: A polarizing, high-energy track with massive potential in niche viral markets but limited traditional radio appeal due to its abrasive textures.
+
+METRICS (Track vs Mainstream Benchmark)
+---------------------------------------
+Beat Impact: 84% (Benchmark: 85%)
+Vocal Presence: 72% (Benchmark: 80%)
+Production Quality: 79% (Benchmark: 82%)
+Virality Potential: 91% (Benchmark: 90%)
+
+SCIENTIFIC DATA (Track vs Mainstream Benchmark)
+-----------------------------------------------
+Danceability: 68% (Benchmark: 75%)
+Energy: 96% (Benchmark: 88%)
+Valence: 42% (Benchmark: 55%)
+Acousticness: 5% (Benchmark: 10%)
+Speechiness: 28% (Benchmark: 25%)
+Instrumentalness: 14% (Benchmark: 10%)
+
+AI INFLUENCE CHECK
+==================
+Human Score: 30%
+AI Score: 70%
+Distribution Risk: Caution
+Fingerprints Detected:
+- Underwater spectral smearing in the high frequencies
+- Unnatural vocal phrasing transitions
+- Perfectly consistent harmonic density
+- Metallic timbre in the mid-range artifacting
+
+STRENGTHS
+---------
++ Exceptional energy levels
++ Distinctive and memorable sonic signature
++ Strong rhythmic drive that commands attention
+
+WEAKNESSES
+----------
+- Excessive high-end harshness leads to listener fatigue
+- Vocal masking in the dense mix
+- Lack of dynamic headroom for professional broadcasting

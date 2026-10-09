@@ -1,0 +1,63 @@
+
+DRIPCHECK AI - SONIC ANALYSIS REPORT
+Generated: 4/15/2026, 10:53:50 AM
+Input File: Audacity_Gaslight Flickr.mp3
+--------------------------------------------------
+
+TRACK: Gaslight Flickr
+ARTIST: Audacity
+GENRE: Alt-R&B / Future Bass
+BPM: 126
+
+DRIP SCORE: 89/100
+VERDICT: A sophisticated, forward-thinking track that pushes technical boundaries while remaining accessible enough for premium placements.
+
+STRATEGIC RECOMMENDATION
+========================
+Path: Commercial Placement
+Reasoning: The atmospheric tension and sophisticated sound design make this a prime candidate for high-end fashion syncs, cinematic trailers, or premium automotive advertisements.
+
+A&R FEEDBACK
+============
+The Beat: Highly syncopated with crisp transients. The snare has a fantastic 'crack' that sits perfectly in the mix without overpowering the mid-range textures.
+Vocals/Lead: Soulful and emotive. The heavy use of formant shifting and pitch correction is an artistic choice rather than a corrective one, creating a haunting, ethereal presence.
+Style/Vibe: Avant-garde meets mainstream R&B. It borrows heavily from the James Blake and Bon Iver school of vocal manipulation while maintaining a commercial rhythmic backbone.
+Commercial Potential: This is a high-level production with significant potential in both the streaming and sync markets. It feels expensive and intentional.
+
+METRICS (Track vs Mainstream Benchmark)
+---------------------------------------
+Beat Impact: 88% (Benchmark: 85%)
+Vocal Presence: 85% (Benchmark: 90%)
+Production Quality: 92% (Benchmark: 94%)
+Virality Potential: 78% (Benchmark: 82%)
+
+SCIENTIFIC DATA (Track vs Mainstream Benchmark)
+-----------------------------------------------
+Danceability: 72% (Benchmark: 75%)
+Energy: 68% (Benchmark: 70%)
+Valence: 38% (Benchmark: 45%)
+Acousticness: 12% (Benchmark: 20%)
+Speechiness: 18% (Benchmark: 15%)
+Instrumentalness: 8% (Benchmark: 5%)
+
+AI INFLUENCE CHECK
+==================
+Human Score: 92%
+AI Score: 8%
+Distribution Risk: Safe
+Fingerprints Detected:
+- Dynamic micro-timing in percussion
+- Intentional artistic vocal distortion
+- Complex harmonic layering
+
+STRENGTHS
+---------
++ Expert-level vocal layering and texture
++ Pristine sound stage and spatial imaging
++ Strong emotional resonance despite heavy digital processing
+
+WEAKNESSES
+----------
+- Abstract lyrical delivery may hinder casual sing-along
+- Missing a high-energy 'peak' moment for club rotation
+- Niche aesthetic may alienate conservative R&B listeners
