@@ -5,6 +5,9 @@ import express, { Request, Response } from 'express';
 import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
+import crypto from 'crypto';
+import { execFile } from 'child_process';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI, Type } from '@google/genai';
 
@@ -110,6 +113,146 @@ app.get('/api/legacy-reports/:filename', (req: Request, res: Response) => {
     res.json({ filename: safeName, content });
   } catch (err: any) {
     res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+// Resolve Streaming & Cloud Link Route (YouTube, Spotify, SoundCloud, Google Drive, Direct Audio)
+app.post('/api/resolve-link', async (req: Request, res: Response) => {
+  try {
+    const { url } = req.body;
+    if (!url || typeof url !== 'string' || !url.trim()) {
+      return res.status(400).json({ error: 'Please provide a valid audio link or streaming URL.' });
+    }
+
+    const cleanUrl = url.trim();
+    console.log(`[DripCheck Pro] Resolving link: ${cleanUrl}`);
+
+    // Generate unique temp file path
+    const tempId = 'dripcheck_' + Date.now() + '_' + crypto.randomBytes(4).toString('hex');
+    const tempDir = os.tmpdir();
+    const tempBase = path.join(tempDir, tempId);
+    const tempOutputPattern = tempBase + '.%(ext)s';
+
+    let resolvedTitle = 'Streamed Audio Track';
+    let resolvedArtist = 'Online Stream';
+    let sourcePlatform = 'Web Stream';
+    let targetArg = cleanUrl;
+
+    // 1. Check if Spotify track URL
+    const spotifyMatch = cleanUrl.match(/https?:\/\/open\.spotify\.com\/track\/([a-zA-Z0-9]+)/i);
+    if (spotifyMatch) {
+      sourcePlatform = 'Spotify';
+      try {
+        const oembedUrl = `https://open.spotify.com/oembed?url=${encodeURIComponent(cleanUrl)}`;
+        const oembedResp = await fetch(oembedUrl);
+        if (oembedResp.ok) {
+          const oembedData: any = await oembedResp.json();
+          resolvedTitle = oembedData.title || 'Spotify Track';
+          resolvedArtist = 'Spotify';
+          targetArg = `ytsearch1:${resolvedTitle} audio`;
+        } else {
+          targetArg = `ytsearch1:${cleanUrl} audio`;
+        }
+      } catch (spotifyErr) {
+        console.warn('[DripCheck Pro] Spotify oEmbed error:', spotifyErr);
+        targetArg = `ytsearch1:${cleanUrl} audio`;
+      }
+    } else if (cleanUrl.includes('music.youtube.com')) {
+      sourcePlatform = 'YouTube Music';
+    } else if (cleanUrl.includes('youtube.com') || cleanUrl.includes('youtu.be')) {
+      sourcePlatform = 'YouTube';
+    } else if (cleanUrl.includes('soundcloud.com')) {
+      sourcePlatform = 'SoundCloud';
+    } else if (cleanUrl.includes('drive.google.com')) {
+      sourcePlatform = 'Google Drive';
+    }
+
+    // 2. Fetch track title and uploader via yt-dlp first (if not Spotify which already has title)
+    if (!spotifyMatch) {
+      try {
+        await new Promise<void>((resolve) => {
+          execFile(
+            'python',
+            ['-m', 'yt_dlp', '--js-runtimes', 'node', '--print', '%(title)s', '--print', '%(uploader)s', targetArg],
+            { timeout: 15000 },
+            (err, stdout) => {
+              if (!err && stdout) {
+                const lines = stdout.trim().split(/\r?\n/).filter(Boolean);
+                if (lines[0]) resolvedTitle = lines[0];
+                if (lines[1]) resolvedArtist = lines[1];
+              }
+              resolve();
+            }
+          );
+        });
+      } catch (_) {}
+    }
+
+    // 3. Extract audio via yt-dlp to MP3
+    await new Promise<void>((resolve, reject) => {
+      execFile(
+        'python',
+        [
+          '-m', 'yt_dlp',
+          '--js-runtimes', 'node',
+          '-x',
+          '--audio-format', 'mp3',
+          '--audio-quality', '0',
+          '--max-filesize', '60M',
+          '-o', tempOutputPattern,
+          targetArg,
+        ],
+        { timeout: 90000 },
+        (err, _stdout, stderr) => {
+          if (err) {
+            console.error('[DripCheck Pro] yt-dlp extraction error:', stderr || err.message);
+            return reject(new Error('Unable to extract audio from this URL. Please verify the link is public and accessible.'));
+          }
+          resolve();
+        }
+      );
+    });
+
+    // 4. Find the generated mp3 file
+    const generatedMp3 = tempBase + '.mp3';
+    let finalPath = generatedMp3;
+    if (!fs.existsSync(generatedMp3)) {
+      const files = fs.readdirSync(tempDir);
+      const match = files.find(f => f.startsWith(tempId));
+      if (!match) {
+        throw new Error('Audio extraction failed: output file was not generated.');
+      }
+      finalPath = path.join(tempDir, match);
+    }
+
+    // 5. Read into Base64
+    const audioBuffer = fs.readFileSync(finalPath);
+    const audioBase64 = audioBuffer.toString('base64');
+    const fileSizeMb = (audioBuffer.length / (1024 * 1024)).toFixed(2);
+
+    // 6. Clean up temp file immediately
+    try {
+      fs.unlinkSync(finalPath);
+    } catch (_) {}
+
+    console.log(`[DripCheck Pro] Successfully extracted audio from ${sourcePlatform} (${fileSizeMb} MB): "${resolvedTitle}"`);
+
+    const safeFileName = `${resolvedTitle.replace(/[/\\?%*:|"<>]/g, '_')}.mp3`;
+    res.json({
+      success: true,
+      title: resolvedTitle,
+      artist: resolvedArtist,
+      source: sourcePlatform,
+      fileName: safeFileName,
+      mimeType: 'audio/mp3',
+      audioBase64,
+      sizeBytes: audioBuffer.length,
+    });
+  } catch (err: any) {
+    console.error('[DripCheck Pro] Link Resolution Error:', err);
+    res.status(500).json({
+      error: err.message || 'Unable to stream or extract audio from this URL. Please verify the link is public.'
+    });
   }
 });
 

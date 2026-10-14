@@ -22,6 +22,8 @@ import {
   HelpCircle,
   TrendingUp,
   RotateCcw,
+  Link2,
+  Globe,
 } from 'lucide-react';
 
 import { DripCheckResult, AudioDspMetrics, ComparisonResult, TimecodedMarker } from './lib/types';
@@ -106,6 +108,12 @@ function DripCheckWorkstation() {
   const [result, setResult] = useState<DripCheckResult | null>(null);
   const [activeTier, setActiveTier] = useState<'all' | 'tier1' | 'tier2' | 'tier3'>('all');
 
+  // Single Track Link Streaming
+  const [uploadTab, setUploadTab] = useState<'file' | 'link'>('file');
+  const [streamUrl, setStreamUrl] = useState('');
+  const [isResolvingLink, setIsResolvingLink] = useState(false);
+  const [linkMeta, setLinkMeta] = useState<{ title: string; artist: string; source: string } | null>(null);
+
   // Compare Mode Files & Results
   const [fileA, setFileA] = useState<File | null>(null);
   const [audioUrlA, setAudioUrlA] = useState<string | null>(null);
@@ -113,6 +121,9 @@ function DripCheckWorkstation() {
   const [audioUrlB, setAudioUrlB] = useState<string | null>(null);
   const [refSongLink, setRefSongLink] = useState('');
   const [comparisonResult, setComparisonResult] = useState<ComparisonResult | null>(null);
+  const [isResolvingRefLink, setIsResolvingRefLink] = useState(false);
+  const [targetLinkB, setTargetLinkB] = useState('');
+  const [isResolvingTargetLinkB, setIsResolvingTargetLinkB] = useState(false);
 
   // Modals
   const [showSettings, setShowSettings] = useState(false);
@@ -140,6 +151,8 @@ function DripCheckWorkstation() {
     setIsAnalyzing(false);
     setAnalysisStep('');
     setActiveTier('all');
+    setStreamUrl('');
+    setLinkMeta(null);
   };
 
   const handleResetCompare = () => {
@@ -150,6 +163,7 @@ function DripCheckWorkstation() {
     setFileB(null);
     setAudioUrlB(null);
     setRefSongLink('');
+    setTargetLinkB('');
     setComparisonResult(null);
     setError(null);
     setIsAnalyzing(false);
@@ -168,6 +182,143 @@ function DripCheckWorkstation() {
       reader.onerror = reject;
       reader.readAsDataURL(f);
     });
+  };
+
+  // Convert Base64 string to a File object
+  const base64ToFile = (base64: string, filename: string, mimeType = 'audio/mp3'): File => {
+    const byteCharacters = atob(base64);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+      byteNumbers[i] = byteCharacters.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    const blob = new Blob([byteArray], { type: mimeType });
+    return new File([blob], filename, { type: mimeType });
+  };
+
+  // Resolve Single Track Streaming Link
+  const handleResolveSingleLink = async (customUrl?: string) => {
+    const targetUrl = (customUrl || streamUrl).trim();
+    if (!targetUrl) {
+      setError('Please enter a valid link from YouTube, Spotify, SoundCloud, or Google Drive.');
+      return;
+    }
+    setIsResolvingLink(true);
+    setError(null);
+    setAnalysisStep('Fetching streaming audio & resolving metadata...');
+
+    try {
+      const resp = await fetch('/api/resolve-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: targetUrl }),
+      });
+
+      if (!resp.ok) {
+        const errData = await resp.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to extract audio from URL');
+      }
+
+      const data = await resp.json();
+      setLinkMeta({
+        title: data.title,
+        artist: data.artist,
+        source: data.source,
+      });
+
+      // Convert Base64 to File object
+      const extractedFile = base64ToFile(data.audioBase64, data.fileName, data.mimeType || 'audio/mp3');
+      setFile(extractedFile);
+      if (audioUrl) {
+        try { URL.revokeObjectURL(audioUrl); } catch (_) {}
+      }
+      const url = URL.createObjectURL(extractedFile);
+      setAudioUrl(url);
+      setResult(null);
+
+      // Run client-side Web Audio DSP
+      try {
+        setAnalysisStep('Computing Web Audio FFT spectrum & LUFS from stream...');
+        const dsp = await analyzeAudioDsp(extractedFile);
+        setDspMetrics(dsp);
+      } catch (dspErr) {
+        console.warn('Web Audio DSP error on stream:', dspErr);
+      }
+    } catch (err: any) {
+      console.error('Resolve link error:', err);
+      setError(err.message || 'Unable to extract audio from streaming link. Ensure the link is public.');
+    } finally {
+      setIsResolvingLink(false);
+      setAnalysisStep('');
+    }
+  };
+
+  // Resolve Compare Track A Reference Link
+  const handleResolveCompareLinkA = async (customUrl?: string) => {
+    const targetUrl = (customUrl || refSongLink).trim();
+    if (!targetUrl) {
+      setError('Please enter a Spotify, YouTube, or audio link for Track A.');
+      return;
+    }
+    setIsResolvingRefLink(true);
+    setError(null);
+
+    try {
+      const resp = await fetch('/api/resolve-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: targetUrl }),
+      });
+
+      if (!resp.ok) {
+        const errData = await resp.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to extract audio for Track A');
+      }
+
+      const data = await resp.json();
+      const extractedFile = base64ToFile(data.audioBase64, data.fileName, data.mimeType || 'audio/mp3');
+      setFileA(extractedFile);
+      if (audioUrlA) { try { URL.revokeObjectURL(audioUrlA); } catch (_) {} }
+      setAudioUrlA(URL.createObjectURL(extractedFile));
+    } catch (err: any) {
+      setError(err.message || 'Could not stream Track A.');
+    } finally {
+      setIsResolvingRefLink(false);
+    }
+  };
+
+  // Resolve Compare Track B Target Link
+  const handleResolveCompareLinkB = async (customUrl?: string) => {
+    const targetUrl = (customUrl || targetLinkB).trim();
+    if (!targetUrl) {
+      setError('Please enter a link for Track B.');
+      return;
+    }
+    setIsResolvingTargetLinkB(true);
+    setError(null);
+
+    try {
+      const resp = await fetch('/api/resolve-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: targetUrl }),
+      });
+
+      if (!resp.ok) {
+        const errData = await resp.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to extract audio for Track B');
+      }
+
+      const data = await resp.json();
+      const extractedFile = base64ToFile(data.audioBase64, data.fileName, data.mimeType || 'audio/mp3');
+      setFileB(extractedFile);
+      if (audioUrlB) { try { URL.revokeObjectURL(audioUrlB); } catch (_) {} }
+      setAudioUrlB(URL.createObjectURL(extractedFile));
+    } catch (err: any) {
+      setError(err.message || 'Could not stream Track B.');
+    } finally {
+      setIsResolvingTargetLinkB(false);
+    }
   };
 
   // Handle Single File Drop
@@ -511,46 +662,210 @@ Audited via DripCheck Pro Multi-Agent Workstation
         {/* ================= MODE: SINGLE TRACK AUDIT ================= */}
         {mode === 'single' && (
           <div className="space-y-6">
-            {/* Audio Dropzone / Upload Area */}
-            {!result && (
+            {/* Input Method Switcher (When no track is loaded yet) */}
+            {!result && !file && (
+              <div className="flex justify-center mb-2">
+                <div className="bg-zinc-900/90 border border-zinc-800/80 rounded-2xl p-1.5 flex items-center gap-1.5 w-full max-w-md shadow-xl backdrop-blur-sm">
+                  <button
+                    type="button"
+                    onClick={() => setUploadTab('file')}
+                    className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                      uploadTab === 'file'
+                        ? 'bg-cyan-500 text-zinc-950 shadow-md'
+                        : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Upload Audio File</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setUploadTab('link')}
+                    className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                      uploadTab === 'link'
+                        ? 'bg-cyan-500 text-zinc-950 shadow-md'
+                        : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    <Link2 className="w-3.5 h-3.5" />
+                    <span>Paste Streaming Link</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* File Dropzone Area (When uploadTab === 'file' and no track loaded) */}
+            {!result && !file && uploadTab === 'file' && (
               <div
                 {...getSingleDropProps()}
                 className={`border-2 border-dashed rounded-3xl p-8 sm:p-12 text-center cursor-pointer transition-all ${
                   isSingleDragActive
                     ? 'border-cyan-400 bg-cyan-950/20'
-                    : file
-                    ? 'border-zinc-700 bg-zinc-900/60'
                     : 'border-zinc-800 hover:border-zinc-700 bg-zinc-900/30'
                 }`}
               >
                 <input {...getSingleInputProps()} />
                 <div className="w-16 h-16 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center mx-auto mb-4 text-cyan-400 shadow-xl">
-                  {file ? <Music className="w-8 h-8" /> : <Upload className="w-8 h-8" />}
+                  <Upload className="w-8 h-8" />
                 </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-bold text-white mb-1">
+                    Drag & Drop Your Audio Track Here
+                  </h3>
+                  <p className="text-xs sm:text-sm text-zinc-400 max-w-md mx-auto mb-3">
+                    Supports MP3, WAV, M4A, OGG, and FLAC (Up to 50MB). Web Audio DSP runs instantly in your browser.
+                  </p>
+                  <span className="text-[11px] px-3 py-1 rounded-full bg-zinc-800 text-zinc-300 font-mono inline-block">
+                    Free Scan Available • Ready For Commercial Audit
+                  </span>
+                </div>
+              </div>
+            )}
 
-                {file ? (
-                  <div>
-                    <h3 className="text-base font-bold text-white mb-1">{file.name}</h3>
-                    <p className="text-xs text-zinc-400 font-mono mb-4">
-                      {(file.size / (1024 * 1024)).toFixed(2)} MB • {file.type || 'audio/mp3'}
-                    </p>
-                    <p className="text-xs text-cyan-400 font-semibold">
-                      Click or drop another file to replace
-                    </p>
+            {/* Streaming & Cloud Link Input Card (When uploadTab === 'link' and no track loaded) */}
+            {!result && !file && uploadTab === 'link' && (
+              <div className="border border-zinc-800 bg-zinc-900/40 rounded-3xl p-6 sm:p-10 shadow-2xl relative overflow-hidden backdrop-blur-sm">
+                <div className="max-w-2xl mx-auto text-center space-y-4">
+                  <div className="w-16 h-16 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center mx-auto text-cyan-400 shadow-xl">
+                    <Globe className="w-8 h-8" />
                   </div>
-                ) : (
+
                   <div>
                     <h3 className="text-base sm:text-lg font-bold text-white mb-1">
-                      Drag & Drop Your Audio Track Here
+                      Stream Audio from Online & Cloud Links
                     </h3>
-                    <p className="text-xs sm:text-sm text-zinc-400 max-w-md mx-auto mb-3">
-                      Supports MP3, WAV, M4A, OGG, and FLAC (Up to 50MB). Web Audio DSP runs instantly in your browser.
+                    <p className="text-xs sm:text-sm text-zinc-400 max-w-lg mx-auto">
+                      Paste a public link from <strong className="text-zinc-200">YouTube, Spotify, SoundCloud, YouTube Music</strong>, or <strong className="text-zinc-200">Google Drive</strong>. We extract high-fidelity studio audio, run Web Audio DSP in your browser, and deliver your full A&R audit.
                     </p>
-                    <span className="text-[11px] px-3 py-1 rounded-full bg-zinc-800 text-zinc-300 font-mono inline-block">
-                      Free Scan Available • Ready For Commercial Audit
+                  </div>
+
+                  {/* Link Input Row */}
+                  <div className="flex flex-col sm:flex-row gap-2.5 pt-2">
+                    <div className="relative flex-1">
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-500">
+                        <Link2 className="w-4 h-4 text-cyan-400" />
+                      </div>
+                      <input
+                        type="url"
+                        value={streamUrl}
+                        onChange={(e) => setStreamUrl(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !isResolvingLink && streamUrl.trim()) {
+                            handleResolveSingleLink();
+                          }
+                        }}
+                        placeholder="Paste YouTube, Spotify, SoundCloud, or Google Drive link..."
+                        className="w-full pl-10 pr-4 py-3 bg-zinc-950 border border-zinc-800 rounded-2xl text-xs sm:text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all font-mono"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleResolveSingleLink()}
+                      disabled={isResolvingLink || !streamUrl.trim()}
+                      className="px-6 py-3 rounded-2xl bg-gradient-to-r from-cyan-500 to-indigo-500 hover:opacity-95 text-zinc-950 font-bold text-xs sm:text-sm transition-all shadow-lg shadow-cyan-500/10 disabled:opacity-50 flex items-center justify-center gap-2 shrink-0 cursor-pointer"
+                    >
+                      {isResolvingLink ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Extracting Audio...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Zap className="w-4 h-4 fill-current" />
+                          <span>Fetch & Dissect</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Platform Badges */}
+                  <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+                    <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">Supported Platforms:</span>
+                    <span className="px-2.5 py-1 rounded-lg bg-zinc-950 border border-red-900/60 text-red-400 font-mono text-[11px] flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span> YouTube
+                    </span>
+                    <span className="px-2.5 py-1 rounded-lg bg-zinc-950 border border-rose-900/60 text-rose-400 font-mono text-[11px] flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span> YT Music
+                    </span>
+                    <span className="px-2.5 py-1 rounded-lg bg-zinc-950 border border-emerald-900/60 text-emerald-400 font-mono text-[11px] flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Spotify
+                    </span>
+                    <span className="px-2.5 py-1 rounded-lg bg-zinc-950 border border-amber-900/60 text-amber-400 font-mono text-[11px] flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span> SoundCloud
+                    </span>
+                    <span className="px-2.5 py-1 rounded-lg bg-zinc-950 border border-sky-900/60 text-sky-400 font-mono text-[11px] flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-sky-500"></span> Google Drive
                     </span>
                   </div>
-                )}
+
+                  {/* One-click Demo Examples */}
+                  <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+                    <span className="text-[10px] text-zinc-500">Quick Test:</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const url = 'https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT';
+                        setStreamUrl(url);
+                        handleResolveSingleLink(url);
+                      }}
+                      disabled={isResolvingLink}
+                      className="px-2.5 py-1 rounded-lg bg-zinc-800/80 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-700/60 text-[10px] font-mono transition-colors cursor-pointer"
+                    >
+                      ⚡ Spotify: Rick Astley
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const url = 'https://www.youtube.com/watch?v=DAjMZ6fCPOo';
+                        setStreamUrl(url);
+                        handleResolveSingleLink(url);
+                      }}
+                      disabled={isResolvingLink}
+                      className="px-2.5 py-1 rounded-lg bg-zinc-800/80 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-700/60 text-[10px] font-mono transition-colors cursor-pointer"
+                    >
+                      ⚡ YouTube: Test Beat
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Loaded Track Banner Card (When track is loaded but audit not yet triggered) */}
+            {!result && file && (
+              <div className="border border-zinc-800 bg-zinc-900/60 rounded-3xl p-6 sm:p-8 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 rounded-2xl bg-zinc-950 border border-zinc-800 flex items-center justify-center text-cyan-400 shadow-md shrink-0">
+                    <Music className="w-7 h-7" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                      <h3 className="text-base font-bold text-white">{linkMeta?.title || file.name}</h3>
+                      {linkMeta?.source ? (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-cyan-950 border border-cyan-800 text-cyan-300">
+                          {linkMeta.source}
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-zinc-800 text-zinc-400">
+                          Local File
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-zinc-400 font-mono">
+                      {linkMeta?.artist ? `${linkMeta.artist} • ` : ''}{(file.size / (1024 * 1024)).toFixed(2)} MB • {file.type || 'audio/mp3'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleReset}
+                    className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-colors border border-zinc-700 cursor-pointer"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Choose Another Track</span>
+                  </button>
+                </div>
               </div>
             )}
 
@@ -865,20 +1180,50 @@ Audited via DripCheck Pro Multi-Agent Workstation
 
                   <div className="mt-2">
                     <label className="text-[11px] text-zinc-400 block mb-1">
-                      Or Reference Song Name / Spotify Link:
+                      Or Reference Spotify, YouTube, or Stream Link:
                     </label>
-                    <input
-                      type="text"
-                      value={refSongLink}
-                      onChange={e => setRefSongLink(e.target.value)}
-                      placeholder="e.g. Travis Scott - FE!N, or Metro Boomin master"
-                      className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-zinc-200 focus:outline-none focus:border-cyan-500"
-                    />
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={refSongLink}
+                        onChange={e => setRefSongLink(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' && !isResolvingRefLink && refSongLink.trim()) {
+                            handleResolveCompareLinkA();
+                          }
+                        }}
+                        placeholder="Paste Spotify, YouTube, or song link..."
+                        className="flex-1 px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-zinc-200 focus:outline-none focus:border-cyan-500 font-mono"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleResolveCompareLinkA()}
+                        disabled={isResolvingRefLink || !refSongLink.trim()}
+                        className="px-3 py-2 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-zinc-950 font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all shadow-md shrink-0 cursor-pointer"
+                        title="Stream and extract authentic studio audio from Spotify, YouTube, or audio link"
+                      >
+                        {isResolvingRefLink ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            <span>Streaming...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Zap className="w-3.5 h-3.5 fill-current" />
+                            <span>Stream Audio</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
                 </div>
 
                 {audioUrlA && (
-                  <div className="mt-4">
+                  <div className="mt-4 bg-zinc-950 p-2.5 rounded-2xl border border-zinc-800">
+                    <div className="text-[11px] font-mono text-cyan-400 mb-1 flex items-center justify-between">
+                      <span className="truncate">{fileA?.name || 'Track A Audio'}</span>
+                      <span className="text-[9px] uppercase bg-cyan-950 px-1.5 py-0.5 rounded border border-cyan-800">Loaded</span>
+                    </div>
                     <audio src={audioUrlA} controls className="w-full h-8" />
                   </div>
                 )}
@@ -905,14 +1250,57 @@ Audited via DripCheck Pro Multi-Agent Workstation
                       <div className="text-xs text-white font-bold truncate">{fileB.name}</div>
                     ) : (
                       <div className="text-xs text-zinc-400">
-                        Drop your target unreleased track here
+                        Drop your target unreleased track here, or stream via link below
                       </div>
                     )}
+                  </div>
+
+                  <div className="mt-2">
+                    <label className="text-[11px] text-zinc-400 block mb-1">
+                      Or Target Track Cloud Link (Google Drive, SoundCloud, YouTube):
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={targetLinkB}
+                        onChange={e => setTargetLinkB(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter' && !isResolvingTargetLinkB && targetLinkB.trim()) {
+                            handleResolveCompareLinkB();
+                          }
+                        }}
+                        placeholder="Paste Google Drive, SoundCloud, or link..."
+                        className="flex-1 px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-zinc-200 focus:outline-none focus:border-emerald-500 font-mono"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleResolveCompareLinkB()}
+                        disabled={isResolvingTargetLinkB || !targetLinkB.trim()}
+                        className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-zinc-950 font-bold text-xs rounded-xl flex items-center gap-1.5 transition-all shadow-md shrink-0 cursor-pointer"
+                        title="Stream and extract target unreleased track from link"
+                      >
+                        {isResolvingTargetLinkB ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            <span>Streaming...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Zap className="w-3.5 h-3.5 fill-current" />
+                            <span>Stream Audio</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
                 </div>
 
                 {audioUrlB && (
-                  <div className="mt-4">
+                  <div className="mt-4 bg-zinc-950 p-2.5 rounded-2xl border border-zinc-800">
+                    <div className="text-[11px] font-mono text-emerald-400 mb-1 flex items-center justify-between">
+                      <span className="truncate">{fileB?.name || 'Track B Audio'}</span>
+                      <span className="text-[9px] uppercase bg-emerald-950 px-1.5 py-0.5 rounded border border-emerald-800">Loaded</span>
+                    </div>
                     <audio src={audioUrlB} controls className="w-full h-8" />
                   </div>
                 )}
